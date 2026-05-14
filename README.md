@@ -69,8 +69,21 @@ La aplicación consume un CSV público de Google Sheets definido dentro de `APP_
 
 ## Notas técnicas
 
-- El archivo fue ajustado para funcionar como página estática en GitHub Pages.
-- Se eliminó el `onclick` inline del botón de sincronización y se sustituyó por listeners en JavaScript.
-- Se mejoró el comportamiento responsivo para pantallas medianas y móviles.
-- Se añadió una configuración centralizada (`APP_CONFIG`) para facilitar mantenimiento.
-- El tablero sigue dependiendo de que el CSV público permita acceso sin autenticación.
+- Arquitectura **single-page** en `index.html`, orientada a despliegue estático en GitHub Pages sin pipeline de build ni backend propio.
+- La capa de datos se alimenta desde un CSV público de Google Sheets consumido con PapaParse mediante `download: true`, `header: true` y `skipEmptyLines: true`.
+- El mapeo semántico de columnas se resuelve con el objeto `fieldMappings`, que permite tolerancia ante variaciones de encabezados, acentos, mayúsculas y nombres alternativos.
+- La función `getValue()` aplica búsqueda por coincidencia estricta, coincidencia normalizada, coincidencia parcial segura y fallback por índice de columna para robustecer la extracción de campos críticos.
+- El estado de avance se normaliza con `normalizeSemaforo()` hacia las categorías `Verde`, `Amarillo`, `Rojo` y `Gris`, lo que unifica criterios visuales y analíticos en todo el tablero.
+- El cálculo de eficiencia global del PMD se basa en `calculateScorePMD()`, asignando ponderaciones 100, 50, 0 y 25 según el semáforo normalizado de cada línea de acción.
+- La capa visual utiliza Tailwind CSS por CDN, componentes tipo `glass-card`, layout lateral fijo de filtros y un contenedor principal responsive optimizado para escritorio, tablet y móvil.
+- La iconografía se renderiza con Lucide y se reinicializa dinámicamente tras inyecciones HTML, especialmente en el módulo de recomendaciones automáticas.
+- Las visualizaciones usan Chart.js y cubren cinco componentes analíticos: distribución de semáforos por dependencia, estado de líneas de acción, proyección multianual, avance trimestral y expediente individual de auditoría.
+- El panel de auditoría específica implementa un flujo de drill-down por entidad y línea de acción, mostrando metadatos, resultados trimestrales y una gráfica de cumplimiento 2025-2027 por registro seleccionado.
+- El motor de recomendaciones genera hallazgos automáticos sobre salud global, dependencias críticas, mejores prácticas, propósitos en riesgo, cuellos de botella y tendencias trimestrales a partir del conjunto filtrado.
+- La interacción del usuario se controla mediante listeners desacoplados para filtros, reinicio, sincronización y selectores de auditoría, evitando atributos inline y facilitando mantenimiento.
+- La inicialización del tablero ocurre en `DOMContentLoaded`, donde se cargan iconos, eventos, estado vacío del drill-down y sincronización inicial de datos.
+- La solución depende de conectividad externa hacia CDNs y hacia la hoja publicada de Google Sheets, por lo que la disponibilidad del dashboard está sujeta a esos servicios.
+
+## Autor
+
+Desarrollado por **Alonso Villalobos Lara**.
