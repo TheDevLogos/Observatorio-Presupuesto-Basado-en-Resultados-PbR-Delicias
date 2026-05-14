@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PbR Delicias | Dashboard de Evaluación del Desempeño</title>
+    <!-- Tailwind CSS para Estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide para Iconos -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js para Gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse para procesar CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Fuente Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+
+        :root { color-scheme: light; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .glass-card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #e2e8f0;
+            transition: transform 0.2s ease-in-out;
+        }
+        .glass-card:hover { transform: translateY(-1px); }
+        .chart-container { position: relative; height: 320px; width: 100%; }
+        .sidebar-shell { min-width: 18rem; }
+        .badge-status { letter-spacing: 0.02em; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .dark-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+
+        .loader-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 1024px) {
+            body { height: auto; overflow: auto; flex-direction: column; }
+            aside { width: 100% !important; height: auto !important; position: relative; }
+            main { overflow: visible !important; padding: 1rem !important; }
+            .chart-container { height: 280px; }
+        }
+
+        @media (max-width: 640px) {
+            .chart-container { height: 240px; }
+        }
+
+    </style>
+</head>
+<body class="flex min-h-screen overflow-x-hidden text-slate-800">
+
+    <!-- Pantalla de Carga -->
+    <div id="loader" class="fixed inset-0 bg-slate-900/80 z-50 flex flex-col justify-center items-center backdrop-blur-sm transition-opacity duration-300">
+        <div class="loader-spinner mb-4"></div>
+        <p class="text-white font-medium animate-pulse" id="loader-text">Sincronizando con Google Sheets...</p>
+    </div>
+
+    <!-- Barra Lateral (Filtros) -->
+    <aside class="w-72 sidebar-shell bg-slate-900 text-slate-300 flex flex-col lg:h-screen lg:sticky lg:top-0 shadow-xl z-10 flex-shrink-0 overflow-y-auto dark-scrollbar">
+        <div class="p-6 border-b border-slate-700/50">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="bg-blue-600 p-2 rounded-lg text-white">
+                    <i data-lucide="bar-chart-2" class="w-6 h-6"></i>
+                </div>
+                <h1 class="text-xl font-bold text-white tracking-tight">PbR Delicias</h1>
+            </div>
+            <p class="text-xs text-slate-400">Sistema de Evaluación del Desempeño</p>
+        </div>
+
+        <div class="p-6 flex-1 space-y-5">
+            <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <i data-lucide="filter" class="w-4 h-4"></i> Filtros Dinámicos
+            </h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Eje Estratégico</label>
+                    <select id="filter-eje" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todos los Ejes</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">ODS</label>
+                    <select id="filter-ods" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todos los ODS</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Entidad Responsable</label>
+                    <select id="filter-entidad" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todas las Entidades</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Meta ODS</label>
+                    <select id="filter-metaOds" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todas</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Fin</label>
+                    <select id="filter-fin" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todos</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Propósito</label>
+                    <select id="filter-proposito" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todos</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Componente</label>
+                    <select id="filter-componente" class="filter-select w-full bg-slate-800 border border-slate-700 text-sm rounded-lg p-2.5 text-white outline-none"><option value="all">Todos</option></select>
+                </div>
+            </div>
+
+            <button id="btn-reset" class="mt-6 w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i> Limpiar Filtros
+            </button>
+        </div>
+    </aside>
+
+    <!-- Contenido Principal -->
+    <main class="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
+        
+        <div id="error-alert" class="hidden mb-6 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-sm" role="alert">
+            <p class="font-bold">Error</p>
+            <p id="error-message">Hubo un problema al cargar los datos.</p>
+        </div>
+
+        <!-- Encabezado y Sincronización -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div>
+                <h2 class="text-2xl font-bold text-slate-800">Métricas de Resultados (PbR)</h2>
+                <p class="text-slate-500 mt-1 text-sm">Monitoreo de Indicadores y Plan Municipal de Desarrollo</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Última Sincronización</p>
+                    <p id="sync-time" class="text-sm font-bold text-slate-700">--</p>
+                </div>
+                <button id="btn-sync" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors text-sm font-medium">
+                    <i data-lucide="refresh-ccw" class="w-4 h-4"></i>
+                    Sincronizar Datos
+                </button>
+            </div>
+        </div>
+
+        <!-- Tarjetas de KPIs -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <div class="glass-card p-5 border-b-4 border-b-slate-400">
+                <p class="text-sm font-medium text-slate-500 flex items-center gap-2 mb-2"><i data-lucide="layers" class="w-4 h-4"></i> Total Acciones</p>
+                <p id="kpi-total" class="text-3xl font-black text-slate-800">0</p>
+            </div>
+            <div class="glass-card p-5 border-b-4 border-b-emerald-500">
+                <p class="text-sm font-medium text-slate-500 flex items-center gap-2 mb-2"><i data-lucide="check-circle" class="w-4 h-4 text-emerald-500"></i> Semáforo Verde</p>
+                <p id="kpi-verde" class="text-3xl font-black text-emerald-600">0</p>
+                <p id="kpi-verde-pct" class="text-xs font-semibold text-emerald-600 bg-emerald-50 inline-block px-2 py-0.5 rounded mt-1">0%</p>
+            </div>
+            <div class="glass-card p-5 border-b-4 border-b-amber-500">
+                <p class="text-sm font-medium text-slate-500 flex items-center gap-2 mb-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> Semáforo Amarillo</p>
+                <p id="kpi-amarillo" class="text-3xl font-black text-amber-600">0</p>
+                <p id="kpi-amarillo-pct" class="text-xs font-semibold text-amber-600 bg-amber-50 inline-block px-2 py-0.5 rounded mt-1">0%</p>
+            </div>
+            <div class="glass-card p-5 border-b-4 border-b-red-500">
+                <p class="text-sm font-medium text-slate-500 flex items-center gap-2 mb-2"><i data-lucide="x-octagon" class="w-4 h-4 text-red-500"></i> Semáforo Rojo</p>
+                <p id="kpi-rojo" class="text-3xl font-black text-red-600">0</p>
+                <p id="kpi-rojo-pct" class="text-xs font-semibold text-red-600 bg-red-50 inline-block px-2 py-0.5 rounded mt-1">0%</p>
+            </div>
+            <div class="glass-card p-5 border-b-4 border-b-blue-500 bg-blue-50/30">
+                <p class="text-sm font-medium text-slate-500 flex items-center gap-2 mb-2"><i data-lucide="award" class="w-4 h-4 text-blue-500"></i> Eficiencia PMD</p>
+                <p id="kpi-eficiencia" class="text-3xl font-black text-blue-600">0%</p>
+                <p class="text-xs font-medium text-slate-400 mt-1">Cumplimiento Global</p>
+            </div>
+        </div>
+
+        <!-- Gráficos Principales y Analíticas -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+            <!-- Motor de Insights y Recomendaciones -->
+            <div class="xl:col-span-1 glass-card p-0 flex flex-col overflow-hidden bg-slate-900 border-none shadow-xl">
+                <div class="p-4 border-b border-slate-700/80 bg-slate-800/80">
+                    <h3 class="font-bold text-white flex items-center gap-2">
+                        <i data-lucide="zap" class="w-5 h-5 text-yellow-400"></i> Motor de Recomendaciones (SED)
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Análisis automático basado en la MIR actual.</p>
+                </div>
+                <div class="p-4 flex-1 flex flex-col gap-3 overflow-y-auto dark-scrollbar max-h-[400px]" id="insights-container">
+                    <!-- Los insights se inyectan aquí -->
+                    <p class="text-slate-400 text-sm animate-pulse">Analizando matrices...</p>
+                </div>
+            </div>
+
+            <!-- Gráfico Entidad vs Semáforo -->
+            <div class="xl:col-span-2 glass-card p-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-slate-800">Distribución de Semáforos por Dependencia</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chartSemaforo"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Segunda Fila de Gráficos -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card p-5">
+                <h3 class="font-bold text-slate-800 mb-4">Estado de Líneas de Acción</h3>
+                <div class="chart-container"><canvas id="chartEstado"></canvas></div>
+            </div>
+            <div class="glass-card p-5">
+                <h3 class="font-bold text-slate-800 mb-4">Proyección de Cumplimiento Multianual</h3>
+                <div class="chart-container"><canvas id="chartEvolucionAnual"></canvas></div>
+            </div>
+            <div class="glass-card p-5">
+                <h3 class="font-bold text-slate-800 mb-4">Avance de Ejecución Trimestral</h3>
+                <div class="chart-container"><canvas id="chartTrimestral"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Módulo de Auditoría por Línea de Acción (Drill-Down) -->
+        <div class="bg-slate-100 rounded-2xl p-6 border border-slate-200 mb-8 shadow-inner">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-2 bg-blue-100 rounded-lg"><i data-lucide="microscope" class="w-6 h-6 text-blue-600"></i></div>
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">Auditoría Específica de Línea de Acción</h2>
+                    <p class="text-slate-500 text-sm">Seleccione una entidad y una acción para ver su expediente detallado.</p>
+                </div>
+            </div>
+
+            <!-- Selectores de Drill-Down -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">1. Entidad Responsable</label>
+                    <select id="drill-entidad" class="w-full bg-white border border-slate-300 rounded-lg p-3 text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">-- Seleccione Entidad --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">2. Línea de Acción (Ficha técnica)</label>
+                    <select id="drill-linea" disabled class="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50">
+                        <option value="">-- Primero seleccione Entidad --</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Contenedor del Expediente (Oculto inicialmente) -->
+            <div id="drill-card" class="hidden glass-card overflow-hidden transition-all">
+                <div class="bg-slate-800 p-5 text-white flex justify-between items-start md:items-center flex-col md:flex-row gap-4">
+                    <div class="flex-1">
+                        <p class="text-xs text-blue-300 font-bold uppercase tracking-wider mb-1" id="drill-meta">Meta ODS: --</p>
+                        <h3 class="text-sm md:text-base font-bold leading-snug" id="drill-title">Nombre de la Línea</h3>
+                    </div>
+                    <div id="drill-badge" class="px-4 py-1.5 rounded-full text-sm font-bold border whitespace-nowrap">
+                        Estado
+                    </div>
+                </div>
+                
+                <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Metadatos de la Acción -->
+                    <div class="col-span-1 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Estado Actual</p>
+                                <p class="font-medium text-slate-700 text-sm" id="drill-estado">--</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Sentido / Frecuencia</p>
+                                <p class="font-medium text-slate-700 text-sm"><span id="drill-sentido">--</span> / <span id="drill-frecuencia">--</span></p>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">Propósito Asociado</p>
+                            <p class="text-xs font-medium text-slate-600 bg-slate-100 p-2 rounded mt-1" id="drill-proposito">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">Componente / Entregable</p>
+                            <p class="text-xs font-medium text-slate-600 bg-slate-100 p-2 rounded mt-1" id="drill-componente">--</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">Indicador Asociado</p>
+                            <p class="text-xs font-medium text-slate-600 bg-slate-100 p-2 rounded mt-1" id="drill-indicador-asociado">--</p>
+                        </div>
+                        <div class="pt-4 border-t border-slate-100">
+                            <p class="text-[10px] text-slate-400 font-bold uppercase mb-2">Resultados Trimestrales</p>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="bg-slate-50 p-2 border rounded"><span class="font-bold text-slate-500 block text-[10px] uppercase mb-1">Q1:</span> <span id="drill-q1" class="text-slate-700 break-words"></span></div>
+                                <div class="bg-slate-50 p-2 border rounded"><span class="font-bold text-slate-500 block text-[10px] uppercase mb-1">Q2:</span> <span id="drill-q2" class="text-slate-700 break-words"></span></div>
+                                <div class="bg-slate-50 p-2 border rounded"><span class="font-bold text-slate-500 block text-[10px] uppercase mb-1">Q3:</span> <span id="drill-q3" class="text-slate-700 break-words"></span></div>
+                                <div class="bg-slate-50 p-2 border rounded"><span class="font-bold text-slate-500 block text-[10px] uppercase mb-1">Q4:</span> <span id="drill-q4" class="text-slate-700 break-words"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Gráfica de la Acción -->
+                    <div class="col-span-2 border-l border-slate-200 pl-0 md:pl-6">
+                        <h4 class="text-sm font-bold text-slate-700 mb-4">Avance Proyectado (2025 - 2027)</h4>
+                        <div class="h-64 relative w-full">
+                            <canvas id="drillChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="drill-empty" class="text-center py-12 text-slate-400">
+                <i data-lucide="mouse-pointer-click" class="w-12 h-12 mx-auto mb-3 opacity-50"></i>
+                <p>Seleccione una línea de acción para visualizar su expediente y análisis multianual.</p>
+            </div>
+        </div>
+
+    </main>
+
+    
+    <script>
+        const APP_CONFIG = {
+            csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQbnVO133iW8gUxLXTJI-3QUqy9F37uaF8LLvzyyBooSGQqnAwGChc_VqIewt214r-7KiVpgiAMLfv6/pub?gid=654436298&single=true&output=csv',
+            years: ['2025', '2026', '2027']
+        };
+
+        let globalData = [];
+        let filteredData = [];
+        let charts = {};
+
+        const fieldMappings = {
+            noIndicador: ['No. de indicador', 'No. De indicador', 'Indicador', 'Numero de indicador', 'Clave'],
+            eje: ['Eje Estratégico', 'Eje', 'Eje Estrategico'],
+            ods: ['ODS', 'Objetivo de Desarrollo Sostenible'],
+            metaOds: ['Meta ODS relacionada', 'Meta ODS', 'Meta'],
+            fin: ['Fin', 'Objetivo Fin'],
+            proposito: ['Propósito', 'Proposito', 'Objetivo Propósito', 'Propósito Asociado'],
+            componente: ['Componente'],
+            lineaAccion: ['Línea de acción', 'Linea de accion', 'Actividad', 'Acción'],
+            indicadorAsociado: ['Indicador Asociado', 'Nombre del indicador', 'Indicador asociado', 'Nombre de Indicador', 'Indicador (Nombre del Indicador)'],
+            sentidoIndicador: ['Sentido del indicador', 'Sentido', 'Sentido de la medición'],
+            frecuenciaMedicion: ['Frecuencia de medición', 'Frecuencia de medicion', 'Frecuencia'],
+            entidad: ['Entidad Responsable', 'Dependencia', 'Dirección', 'Responsable', 'Unidad Responsable'],
+            estado: ['Estado Actual', 'Estado de la Línea de acción', 'Estado de la Linea de accion', 'Estado', 'Avance', 'Estatus'],
+            semaforo: ['Color Semáforo', 'Color Semaforo', 'Semáforo', 'Semaforo', 'Color', 'Semáforo / Estado de avance al Cuarto Trimestre'],
+            pct2025: ['Porcentaje Cumplimiento 2025', 'Cumplimiento 2025', '2025', '% 2025'],
+            pct2026: ['Porcentaje Cumplimiento 2026', 'Cumplimiento 2026', '2026', '% 2026'],
+            pct2027: ['Porcentaje Cumplimiento 2027', 'Cumplimiento 2027', '2027', '% 2027'],
+            q1: ['Estado 1er Trimestre', '1er Trimestre', 'Q1', 'Trimestre 1'],
+            q2: ['Resultado 2do Trimestre', 'Estado 2do Trimestre', '2do Trimestre', 'Q2', 'Trimestre 2'],
+            q3: ['Estado 3er Trimestre', '3er Trimestre', 'Q3', 'Trimestre 3'],
+            q4: ['Estado 4to Trimestre', '4to Trimestre', 'Q4', 'Trimestre 4'],
+            resQ1: ['Resultado 1er Trimestre', 'Resultado 1er', 'Resultado Q1'],
+            resQ2: ['Resultado 2do Trimestre', 'Resultado 2do', 'Resultado Q2'],
+            resQ3: ['Resultado 3er Trimestre', 'Resultado 3er', 'Resultado Q3'],
+            resQ4: ['Resultado 4to Trimestre', 'Resultado 4to', 'Resultado Q4']
+        };
+
+        const FILTER_KEYS = ['eje', 'ods', 'metaOds', 'fin', 'proposito', 'componente', 'entidad'];
+
+        function setSafeText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.innerText = text ?? '';
+        }
+
+        function normalize(str) {
+            if (!str) return '';
+            return String(str)
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[\r\n]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function getValue(row, key) {
+            const possibleNames = fieldMappings[key] || [];
+
+            for (const name of possibleNames) {
+                if (row[name] != null && String(row[name]).trim() !== '') {
+                    return String(row[name]).trim();
+                }
+            }
+
+            const keysArray = Object.keys(row);
+
+            for (const name of possibleNames) {
+                const normName = normalize(name);
+                const foundKey = keysArray.find((k) => normalize(k) === normName);
+                if (foundKey && row[foundKey] != null && String(row[foundKey]).trim() !== '') {
+                    return String(row[foundKey]).trim();
+                }
+            }
+
+            for (const name of possibleNames) {
+                const normName = normalize(name);
+                if (normName.length < 4) continue;
+                const foundKey = keysArray.find((k) => normalize(k).includes(normName));
+                if (foundKey && row[foundKey] != null && String(row[foundKey]).trim() !== '') {
+                    return String(row[foundKey]).trim();
+                }
+            }
+
+            const indicesFallback = {
+                noIndicador: 7,
+                proposito: 9,
+                componente: 10,
+                lineaAccion: 11,
+                indicadorAsociado: 12,
+                sentidoIndicador: 22,
+                frecuenciaMedicion: 23,
+                estado: 46
+            };
+
+            if (indicesFallback[key] !== undefined && keysArray.length > indicesFallback[key]) {
+                const fallbackKey = keysArray[indicesFallback[key]];
+                if (fallbackKey && row[fallbackKey] != null && String(row[fallbackKey]).trim() !== '') {
+                    return String(row[fallbackKey]).trim();
+                }
+            }
+
+            return 'No Clasificado';
+        }
+
+        function normalizeSemaforo(val) {
+            if (!val) return 'Gris';
+            const s = String(val).toLowerCase();
+            if (s.includes('verde') || s.includes('óptimo') || s.includes('optimo')) return 'Verde';
+            if (s.includes('amarill') || s.includes('precaución') || s.includes('precaucion')) return 'Amarillo';
+            if (s.includes('rojo') || s.includes('crítico') || s.includes('critico')) return 'Rojo';
+            return 'Gris';
+        }
+
+        function parsePercent(val) {
+            if (!val) return 0;
+            const parsed = parseFloat(String(val).replace(/[^0-9.-]+/g, ''));
+            return Number.isNaN(parsed) ? 0 : parsed;
+        }
+
+        function calculateScorePMD(semaforo) {
+            if (semaforo === 'Verde') return 100;
+            if (semaforo === 'Amarillo') return 50;
+            if (semaforo === 'Rojo') return 0;
+            return 25;
+        }
+
+        function showLoader(show, text = 'Sincronizando con Google Sheets...') {
+            const loader = document.getElementById('loader');
+            const loaderText = document.getElementById('loader-text');
+            if (loaderText) loaderText.innerText = text;
+            if (!loader) return;
+            loader.classList.toggle('hidden', !show);
+        }
+
+        function showError(msg) {
+            const errDiv = document.getElementById('error-alert');
+            const errMsg = document.getElementById('error-message');
+            if (errMsg) errMsg.innerText = msg;
+            if (errDiv) errDiv.classList.remove('hidden');
+        }
+
+        function clearError() {
+            document.getElementById('error-alert')?.classList.add('hidden');
+        }
+
+        function updateSyncTime() {
+            const now = new Date();
+            setSafeText('sync-time', `${now.toLocaleDateString('es-MX')} ${now.toLocaleTimeString('es-MX')}`);
+        }
+
+        function mapRow(row, index) {
+            const semaforoNormalized = normalizeSemaforo(getValue(row, 'semaforo'));
+            return {
+                _id: index,
+                noIndicador: getValue(row, 'noIndicador'),
+                eje: getValue(row, 'eje'),
+                ods: getValue(row, 'ods'),
+                metaOds: getValue(row, 'metaOds'),
+                fin: getValue(row, 'fin'),
+                proposito: getValue(row, 'proposito'),
+                componente: getValue(row, 'componente'),
+                lineaAccion: getValue(row, 'lineaAccion'),
+                indicadorAsociado: getValue(row, 'indicadorAsociado'),
+                sentidoIndicador: getValue(row, 'sentidoIndicador'),
+                frecuenciaMedicion: getValue(row, 'frecuenciaMedicion'),
+                entidad: getValue(row, 'entidad'),
+                estado: getValue(row, 'estado'),
+                semaforo: semaforoNormalized,
+                pct2025: parsePercent(getValue(row, 'pct2025')),
+                pct2026: parsePercent(getValue(row, 'pct2026')),
+                pct2027: parsePercent(getValue(row, 'pct2027')),
+                q1: getValue(row, 'q1'),
+                q2: getValue(row, 'q2'),
+                q3: getValue(row, 'q3'),
+                q4: getValue(row, 'q4'),
+                resQ1: getValue(row, 'resQ1'),
+                resQ2: getValue(row, 'resQ2'),
+                resQ3: getValue(row, 'resQ3'),
+                resQ4: getValue(row, 'resQ4'),
+                scorePMD: calculateScorePMD(semaforoNormalized)
+            };
+        }
+
+        function fetchData() {
+            showLoader(true, 'Sincronizando con Google Sheets...');
+            clearError();
+            updateSyncTime();
+
+            Papa.parse(APP_CONFIG.csvUrl, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete(results) {
+                    try {
+                        globalData = (results.data || []).map(mapRow);
+                        filteredData = [...globalData];
+                        populateFilters();
+                        updateDashboard();
+                        initDrillDown();
+                        showLoader(false);
+                    } catch (error) {
+                        console.error('Error al procesar datos:', error);
+                        showError('Los datos se cargaron, pero hubo un error durante el procesamiento.');
+                        showLoader(false);
+                    }
+                },
+                error(error) {
+                    console.error('Error al obtener CSV:', error);
+                    showError('No se pudo conectar a Google Sheets. Verifique la URL publicada y los permisos del archivo.');
+                    showLoader(false);
+                }
+            });
+        }
+
+        function populateFilters() {
+            FILTER_KEYS.forEach((key) => {
+                const select = document.getElementById(`filter-${key}`);
+                if (!select) return;
+
+                const firstOption = select.options[0] ? select.options[0].outerHTML : '<option value="all">Todos</option>';
+                const uniqueValues = [...new Set(globalData.map((item) => item[key]))]
+                    .filter((val) => val && val !== 'No Clasificado')
+                    .sort((a, b) => a.localeCompare(b, 'es'));
+
+                select.innerHTML = firstOption;
+                uniqueValues.forEach((val) => {
+                    const option = document.createElement('option');
+                    option.value = val;
+                    option.textContent = val.length > 70 ? `${val.slice(0, 70)}...` : val;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function applyFilters() {
+            const activeFilters = {};
+            FILTER_KEYS.forEach((key) => {
+                const select = document.getElementById(`filter-${key}`);
+                if (select && select.value !== 'all') activeFilters[key] = select.value;
+            });
+
+            filteredData = globalData.filter((item) => Object.entries(activeFilters).every(([key, value]) => item[key] === value));
+            updateDashboard();
+        }
+
+        function resetFilters() {
+            document.querySelectorAll('.filter-select').forEach((sel) => {
+                sel.value = 'all';
+            });
+            applyFilters();
+        }
+
+        function destroyChart(key) {
+            if (charts[key]) {
+                charts[key].destroy();
+                charts[key] = null;
+            }
+        }
+
+        function updateDashboard() {
+            const total = filteredData.length;
+            const verdes = filteredData.filter((d) => d.semaforo === 'Verde').length;
+            const amarillos = filteredData.filter((d) => d.semaforo === 'Amarillo').length;
+            const rojos = filteredData.filter((d) => d.semaforo === 'Rojo').length;
+            const calcPct = (val) => (total > 0 ? `${((val / total) * 100).toFixed(1)}%` : '0%');
+            const avgScore = total > 0 ? (filteredData.reduce((acc, row) => acc + row.scorePMD, 0) / total).toFixed(1) : '0.0';
+
+            setSafeText('kpi-total', total);
+            setSafeText('kpi-verde', verdes);
+            setSafeText('kpi-verde-pct', calcPct(verdes));
+            setSafeText('kpi-amarillo', amarillos);
+            setSafeText('kpi-amarillo-pct', calcPct(amarillos));
+            setSafeText('kpi-rojo', rojos);
+            setSafeText('kpi-rojo-pct', calcPct(rojos));
+            setSafeText('kpi-eficiencia', `${avgScore}%`);
+
+            generateInsights(total, Number(avgScore));
+            renderChartSemaforo();
+            renderChartEstado();
+            renderChartEvolucionAnual();
+            renderChartTrimestral();
+        }
+
+        function generateInsights(total, avgScore) {
+            const container = document.getElementById('insights-container');
+            if (!container) return;
+            if (total === 0) {
+                container.innerHTML = '<p class="text-slate-400">Sin datos con los filtros actuales.</p>';
+                return;
+            }
+
+            const agg = (key) => {
+                const obj = {};
+                filteredData.forEach((r) => {
+                    const v = r[key];
+                    if (!obj[v]) obj[v] = { score: 0, count: 0, rojo: 0, amarillo: 0, verde: 0 };
+                    obj[v].score += r.scorePMD;
+                    obj[v].count += 1;
+                    if (r.semaforo === 'Rojo') obj[v].rojo += 1;
+                    if (r.semaforo === 'Amarillo') obj[v].amarillo += 1;
+                    if (r.semaforo === 'Verde') obj[v].verde += 1;
+                });
+                return Object.keys(obj)
+                    .filter((k) => k !== 'No Clasificado')
+                    .map((k) => ({ name: k, avg: obj[k].score / obj[k].count, count: obj[k].count, rojo: obj[k].rojo, amarillo: obj[k].amarillo, verde: obj[k].verde }));
+            };
+
+            const entities = agg('entidad');
+            const propositos = agg('proposito');
+            const componentes = agg('componente');
+
+            entities.sort((a, b) => b.avg - a.avg);
+            const bestEntity = entities[0] || null;
+            entities.sort((a, b) => b.rojo - a.rojo || a.avg - b.avg);
+            const worstEntity = entities[0] && entities[0].rojo > 0 ? entities[0] : null;
+
+            propositos.sort((a, b) => a.avg - b.avg);
+            const worstProposito = propositos[0] || null;
+
+            componentes.sort((a, b) => (b.rojo + b.amarillo) - (a.rojo + a.amarillo));
+            const stuckComponent = componentes[0] && (componentes[0].rojo + componentes[0].amarillo > 0) ? componentes[0] : null;
+
+            const qCounts = { q1: 0, q2: 0, q3: 0, q4: 0 };
+            filteredData.forEach((r) => {
+                ['q1', 'q2', 'q3', 'q4'].forEach((q) => {
+                    const val = String(r[q] || '').toLowerCase();
+                    if (val.includes('retras') || val.includes('critic') || val.includes('pendient') || val.includes('rojo')) qCounts[q] += 1;
+                });
+            });
+            const worstQuarter = Object.keys(qCounts).reduce((a, b) => (qCounts[a] > qCounts[b] ? a : b));
+
+            let html = '';
+            const addCard = (icon, title, desc, suggestion, colorClass) => {
+                html += `
+                    <div class="bg-slate-800 border-l-4 ${colorClass} p-3 rounded-r-lg">
+                        <div class="flex gap-2 items-start">
+                            <i data-lucide="${icon}" class="w-4 h-4 mt-0.5 ${colorClass.replace('border-', 'text-')} flex-shrink-0"></i>
+                            <div>
+                                <p class="text-xs font-bold text-white mb-0.5">${title}</p>
+                                <p class="text-[11px] text-slate-300 leading-tight mb-1.5">${desc}</p>
+                                ${suggestion ? `<p class="text-[10px] text-yellow-200 bg-yellow-900/30 p-1.5 border border-yellow-700/50 rounded leading-tight"><b>Acción sugerida:</b> ${suggestion}</p>` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+            };
+
+            addCard(
+                'activity',
+                'Salud del Plan de Desarrollo',
+                `El cumplimiento global está en ${avgScore.toFixed(1)}%.`,
+                avgScore < 60 ? 'Revisión inmediata del presupuesto asignado a programas rezagados.' : null,
+                avgScore > 75 ? 'border-emerald-500' : avgScore > 50 ? 'border-amber-500' : 'border-red-500'
+            );
+
+            if (worstEntity) {
+                addCard(
+                    'alert-octagon',
+                    'Atención a dependencia',
+                    `<b>${worstEntity.name}</b> presenta ${worstEntity.rojo} indicadores en alerta roja.`,
+                    'Instalar mesas técnicas urgentes con el titular y realizar auditoría de procesos internos.',
+                    'border-red-500'
+                );
+            }
+
+            if (bestEntity && bestEntity.avg > 80) {
+                addCard(
+                    'star',
+                    'Mejor práctica institucional',
+                    `<b>${bestEntity.name}</b> lidera el cumplimiento (${bestEntity.avg.toFixed(0)}%).`,
+                    'Documentar sus procesos de gestión y replicar su metodología a otras direcciones.',
+                    'border-emerald-500'
+                );
+            }
+
+            if (worstProposito && worstProposito.avg < 70) {
+                addCard(
+                    'target',
+                    'Propósito en riesgo sistémico',
+                    `El objetivo: <i>${worstProposito.name.substring(0, 40)}...</i> promedia bajo rendimiento.`,
+                    'Revaluar la Matriz de Indicadores (MIR) de este propósito. Las metas podrían estar mal dimensionadas.',
+                    'border-orange-500'
+                );
+            }
+
+            if (stuckComponent) {
+                addCard(
+                    'layers',
+                    'Cuello de botella en componente',
+                    `Múltiples acciones retrasadas en: <i>${stuckComponent.name.substring(0, 40)}...</i>`,
+                    'Verificar viabilidad de entregables y suficiencia de recursos humanos y materiales.',
+                    'border-amber-500'
+                );
+            }
+
+            if (qCounts[worstQuarter] > 0) {
+                const qName = worstQuarter.toUpperCase().replace('Q', 'Trimestre ');
+                const tip = worstQuarter === 'q4'
+                    ? 'Anticipar cierres fiscales para evitar subejercicio.'
+                    : 'Agilizar licitaciones y aperturas presupuestales tempranas.';
+                addCard(
+                    'calendar-x',
+                    'Tendencia histórica de retrasos',
+                    `Los mayores rezagos tienden a concentrarse en el <b>${qName}</b>.`,
+                    tip,
+                    'border-indigo-500'
+                );
+            }
+
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = '#64748b';
+
+        function renderChartSemaforo() {
+            const ctx = document.getElementById('chartSemaforo')?.getContext('2d');
+            if (!ctx) return;
+
+            const entidadSemaforos = {};
+            filteredData.forEach((r) => {
+                const ent = (r.entidad === 'No Clasificado' ? 'Otras' : r.entidad).substring(0, 25);
+                if (!entidadSemaforos[ent]) entidadSemaforos[ent] = { Verde: 0, Amarillo: 0, Rojo: 0 };
+                if (r.semaforo !== 'Gris') entidadSemaforos[ent][r.semaforo] += 1;
+            });
+
+            const labels = Object.keys(entidadSemaforos)
+                .sort((a, b) => (entidadSemaforos[b].Rojo * 3 + entidadSemaforos[b].Amarillo) - (entidadSemaforos[a].Rojo * 3 + entidadSemaforos[a].Amarillo))
+                .slice(0, 12);
+
+            destroyChart('semaforo');
+            charts.semaforo = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Óptimo', data: labels.map((l) => entidadSemaforos[l].Verde), backgroundColor: '#10b981', stack: 'stack-0' },
+                        { label: 'Precaución', data: labels.map((l) => entidadSemaforos[l].Amarillo), backgroundColor: '#f59e0b', stack: 'stack-0' },
+                        { label: 'Crítico', data: labels.map((l) => entidadSemaforos[l].Rojo), backgroundColor: '#ef4444', stack: 'stack-0' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { grid: { display: false } } },
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+
+        function renderChartEstado() {
+            const ctx = document.getElementById('chartEstado')?.getContext('2d');
+            if (!ctx) return;
+
+            const counts = {};
+            filteredData.forEach((r) => {
+                const est = r.estado === 'No Clasificado' ? 'Sin Estado' : r.estado;
+                counts[est] = (counts[est] || 0) + 1;
+            });
+            const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+            destroyChart('estado');
+            charts.estado = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: entries.slice(0, 5).map((e) => e[0]).concat(entries.length > 5 ? ['Otros'] : []),
+                    datasets: [{
+                        data: entries.slice(0, 5).map((e) => e[1]).concat(entries.length > 5 ? [entries.slice(5).reduce((a, b) => a + b[1], 0)] : []),
+                        backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#94a3b8']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: { legend: { position: 'right' } }
+                }
+            });
+        }
+
+        function renderChartEvolucionAnual() {
+            const ctx = document.getElementById('chartEvolucionAnual')?.getContext('2d');
+            if (!ctx) return;
+
+            const total = filteredData.length || 1;
+            const avgs = ['pct2025', 'pct2026', 'pct2027'].map((k) => filteredData.reduce((a, r) => a + r[k], 0) / total);
+
+            destroyChart('anual');
+            charts.anual = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: APP_CONFIG.years,
+                    datasets: [{
+                        label: 'Cumplimiento promedio (%)',
+                        data: avgs,
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.20)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { max: 100, beginAtZero: true } }
+                }
+            });
+        }
+
+        function renderChartTrimestral() {
+            const ctx = document.getElementById('chartTrimestral')?.getContext('2d');
+            if (!ctx) return;
+
+            const dataCounts = { Completado: [0, 0, 0, 0], 'En Proceso': [0, 0, 0, 0], Crítico: [0, 0, 0, 0] };
+
+            ['q1', 'q2', 'q3', 'q4'].forEach((q, idx) => {
+                filteredData.forEach((r) => {
+                    const val = String(r[q] || '').toLowerCase();
+                    if (val.includes('complet') || val.includes('100') || val.includes('verde') || val.includes('termin')) dataCounts.Completado[idx] += 1;
+                    else if (val.includes('proces') || val.includes('amarill') || val.includes('medi')) dataCounts['En Proceso'][idx] += 1;
+                    else if (val.includes('pendient') || val.includes('rojo') || val.includes('critic') || val.includes('retras')) dataCounts.Crítico[idx] += 1;
+                    else if (val.trim() !== '') {
+                        if (r.semaforo === 'Verde') dataCounts.Completado[idx] += 1;
+                        else if (r.semaforo === 'Rojo') dataCounts.Crítico[idx] += 1;
+                        else dataCounts['En Proceso'][idx] += 1;
+                    }
+                });
+            });
+
+            destroyChart('trimestral');
+            charts.trimestral = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+                    datasets: [
+                        { label: 'Óptimo', data: dataCounts.Completado, backgroundColor: '#10b981' },
+                        { label: 'Proceso', data: dataCounts['En Proceso'], backgroundColor: '#3b82f6' },
+                        { label: 'Crítico', data: dataCounts.Crítico, backgroundColor: '#f43f5e' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+
+        function initDrillDown() {
+            const selEntidad = document.getElementById('drill-entidad');
+            const selLinea = document.getElementById('drill-linea');
+            if (!selEntidad || !selLinea) return;
+
+            const entidades = [...new Set(globalData.map((d) => d.entidad))]
+                .filter((e) => e && e !== 'No Clasificado')
+                .sort((a, b) => a.localeCompare(b, 'es'));
+
+            selEntidad.innerHTML = '<option value="">-- Seleccione Entidad --</option>';
+            entidades.forEach((e) => selEntidad.add(new Option(e, e)));
+            selLinea.innerHTML = '<option value="">-- Primero seleccione Entidad --</option>';
+            selLinea.disabled = true;
+
+            if (!selEntidad.dataset.bound) {
+                selEntidad.addEventListener('change', (event) => {
+                    const entidad = event.target.value;
+                    selLinea.innerHTML = '<option value="">-- Seleccione Línea de Acción --</option>';
+
+                    if (!entidad) {
+                        selLinea.disabled = true;
+                        hideDrillCard();
+                        return;
+                    }
+
+                    selLinea.disabled = false;
+                    const lineas = globalData.filter((d) => d.entidad === entidad);
+                    lineas.forEach((l) => {
+                        const numInd = l.noIndicador && l.noIndicador !== 'No Clasificado' ? l.noIndicador : 'Sin Clave de Indicador';
+                        selLinea.add(new Option(numInd, l._id));
+                    });
+                    hideDrillCard();
+                });
+                selEntidad.dataset.bound = 'true';
+            }
+
+            if (!selLinea.dataset.bound) {
+                selLinea.addEventListener('change', (event) => {
+                    const id = event.target.value;
+                    if (!id) {
+                        hideDrillCard();
+                        return;
+                    }
+                    renderDrillDown(Number(id));
+                });
+                selLinea.dataset.bound = 'true';
+            }
+        }
+
+        function hideDrillCard() {
+            document.getElementById('drill-card')?.classList.add('hidden');
+            document.getElementById('drill-empty')?.classList.remove('hidden');
+        }
+
+        function renderDrillDown(id) {
+            const row = globalData.find((d) => d._id === id);
+            if (!row) return;
+
+            document.getElementById('drill-empty')?.classList.add('hidden');
+            document.getElementById('drill-card')?.classList.remove('hidden');
+
+            const titleText = `${row.noIndicador !== 'No Clasificado' ? `[${row.noIndicador}] ` : ''}${row.lineaAccion}`;
+            setSafeText('drill-title', titleText);
+            setSafeText('drill-meta', `Meta ODS: ${row.metaOds}`);
+            setSafeText('drill-estado', row.estado);
+            setSafeText('drill-proposito', row.proposito);
+            setSafeText('drill-componente', row.componente);
+            setSafeText('drill-indicador-asociado', row.indicadorAsociado);
+            setSafeText('drill-sentido', row.sentidoIndicador);
+            setSafeText('drill-frecuencia', row.frecuenciaMedicion);
+            ['1', '2', '3', '4'].forEach((q) => setSafeText(`drill-q${q}`, row[`resQ${q}`] || 'S/D'));
+
+            const badge = document.getElementById('drill-badge');
+            if (badge) {
+                badge.innerText = row.semaforo.toUpperCase();
+                badge.className = 'badge-status px-4 py-1.5 rounded-full text-sm font-bold border';
+                if (row.semaforo === 'Verde') badge.classList.add('bg-emerald-900', 'text-emerald-300', 'border-emerald-700');
+                else if (row.semaforo === 'Amarillo') badge.classList.add('bg-amber-900', 'text-amber-300', 'border-amber-700');
+                else if (row.semaforo === 'Rojo') badge.classList.add('bg-red-900', 'text-red-300', 'border-red-700');
+                else badge.classList.add('bg-slate-700', 'text-slate-300', 'border-slate-500');
+            }
+
+            const ctx = document.getElementById('drillChart')?.getContext('2d');
+            if (!ctx) return;
+
+            destroyChart('drill');
+            charts.drill = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Año 2025', 'Año 2026', 'Año 2027'],
+                    datasets: [{
+                        label: '% Cumplimiento',
+                        data: [row.pct2025, row.pct2026, row.pct2027],
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6,
+                        barThickness: 40
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { max: 100, beginAtZero: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function bindEvents() {
+            document.querySelectorAll('.filter-select').forEach((sel) => sel.addEventListener('change', applyFilters));
+            document.getElementById('btn-reset')?.addEventListener('click', resetFilters);
+            document.getElementById('btn-sync')?.addEventListener('click', fetchData);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            bindEvents();
+            hideDrillCard();
+            fetchData();
+        });
+    </script>
+
+</body>
+</html>
